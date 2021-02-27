@@ -16,9 +16,8 @@ jobs:
         python-version: 3.9
 
     - name: Publish to PyPI
-      uses: casperdcl/deploy-pypi@v2
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+      uses: pypa/gh-action-pypi-publish@release/v1
       with:
+        user: __token__
         password: ${{ secrets.PYPI_TOKEN }}
-        pip: wheel -w dist/ --no-deps .
-        # only upload if a tag is pushed (otherwise just build & check)
-        upload: ${{ github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags') }}
