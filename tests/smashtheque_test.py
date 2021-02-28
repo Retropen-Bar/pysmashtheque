@@ -4,6 +4,11 @@ import pytest
 from   unittest.mock import Mock
 
 from smashtheque.smashtheque import Smashtheque
+from smashtheque.errors import *
+from smashtheque.models.character import *
+from smashtheque.models.player import *
+from smashtheque.models.team import *
+
 
 # FAKE SERVER
 
@@ -72,356 +77,161 @@ async def mock500(request):
 
 # TESTS
 
-@pytest.mark.parametrize('test_apiBaseUrl,test_path,expected', [
-  (None, "toto", "/api/v1/toto"),
-  ("", "toto", "/api/v1/toto"),
-  ("https://example.com", None, "https://example.com/api/v1/"),
-  ("https://example.com", "", "https://example.com/api/v1/"),
-  ("https://example.com", "toto", "https://example.com/api/v1/toto")
-])
-async def test_apiUrl(test_apiBaseUrl, test_path, expected):
-  apiClient = Smashtheque(apiBaseUrl=test_apiBaseUrl, bearerToken=None)
-  assert apiClient.apiUrl(test_path) == expected
 
-# ---------------------------------------------------------------------------
-# CHARACTER
-# ---------------------------------------------------------------------------
-
-async def test_fetchCharacters_success(aiohttp_client):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/characters', mockCharacters)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  result, data = await apiClient.fetchCharacters()
-  assert result
-  assert len(data) == 2
-  assert apiClient._characters_cache["13"]["name"] == "Yoshi"
-  assert apiClient._characters_names_cache["yoshi"] == 13
-
-async def test_fetchCharacters_failure(aiohttp_client):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/characters', mock500)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  result, data = await apiClient.fetchCharacters()
-  assert result == False
-  assert len(data) == 0
-
-async def test_fetchCharactersIfNeeded(aiohttp_client):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/characters', mockCharacters)
-  apiClient._session = await aiohttp_client(app)
-  # check init
-  initCallCount = mockCharacters.call_count
-  assert len(apiClient._characters_cache) == 0
-  # test that data is fetched
-  await apiClient.fetchCharactersIfNeeded()
-  assert mockCharacters.call_count == initCallCount + 1
-  assert len(apiClient._characters_cache) == 2
-  # test that data is not fetched a second time and data is still present
-  await apiClient.fetchCharactersIfNeeded()
-  assert mockCharacters.call_count == initCallCount + 1
-  assert len(apiClient._characters_cache) == 2
-
-@pytest.mark.parametrize('emoji_tag,expected_id', [
-  (None, None),
-  ("", None),
-  ("unknown", None),
-  ("1234", 13),
-  ("5678", 42)
-])
-async def test_findCharacterByEmojiTag(aiohttp_client, emoji_tag, expected_id):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/characters', mockCharacters)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  result = await apiClient.findCharacterByEmojiTag(emoji_tag)
-  if expected_id == None:
-    assert result == None
-  else:
-    assert result["id"] == expected_id
-
-@pytest.mark.parametrize('name,expected_id', [
-  (None, None),
-  ("", None),
-  ("unknown", None),
-  ("yo shi", 13),
-  ("Bôwser", 42),
-  ("bowser", 42)
-])
-async def test_findCharacterByName(aiohttp_client, name, expected_id):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/characters', mockCharacters)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  result = await apiClient.findCharacterByName(name)
-  if expected_id == None:
-    assert result == None
-  else:
-    assert result["id"] == expected_id
-
-@pytest.mark.parametrize('label,expected_id', [
-  (None, None),
-  ("", None),
-  ("unknown", None),
-  ("<:placeholder:666>", None),
-  ("<:placeholder:1234>", 13),
-  ("Bôwser", 42),
-  ("bowser", 42)
-])
-async def test_findCharacterByLabel(aiohttp_client, label, expected_id):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/characters', mockCharacters)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  result = await apiClient.findCharacterByLabel(label)
-  if expected_id == None:
-    assert result == None
-  else:
-    assert result["id"] == expected_id
-
-@pytest.mark.parametrize('label,expected', [
-  (None, False),
-  ("", False),
-  ("unknown", False),
-  ("<:placeholder:666>", False),
-  ("<:placeholder:1234>", False),
-  ("Bôwser", True),
-  ("bowser", True)
-])
-async def test_isCharacterName(aiohttp_client, label, expected):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/characters', mockCharacters)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  result = await apiClient.isCharacterName(label)
-  assert result == expected
-
-@pytest.mark.parametrize('label,expected', [
-  (None, False),
-  ("", False),
-  ("unknown", False),
-  ("<:placeholder:666>", False),
-  ("<:placeholder:1234>", True),
-  ("Bôwser", True),
-  ("bowser", True)
-])
-async def test_isCharacter(aiohttp_client, label, expected):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/characters', mockCharacters)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  result = await apiClient.isCharacter(label)
-  assert result == expected
-
-# ---------------------------------------------------------------------------
-# TEAM
-# ---------------------------------------------------------------------------
-
-async def test_findTeamByShortName(aiohttp_client):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/teams', mockTeams)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  initCallCount = mockTeams.call_count
-  result, details = await apiClient.findTeamByShortName('toto')
-  assert mockTeams.call_count == initCallCount + 1
-  assert len(apiClient._teams_cache) == 2
-  assert apiClient._teams_cache["7"]["name"] == "Rétropen-Bar"
-  assert result
-  assert details["id"] == 7
-
-async def test_findTeamById(aiohttp_client):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/teams/7', mockTeam)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  initCallCount = mockTeam.call_count
-  result, details = await apiClient.findTeamById(7)
-  assert mockTeam.call_count == initCallCount + 1
-  assert result
-  assert details["short_name"] == "R-B"
-
-async def test_updateTeam(aiohttp_client):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_patch('/api/v1/teams/7', mockTeam)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  initCallCount = mockTeam.call_count
-  result, details = await apiClient.updateTeam(7, {})
-  assert mockTeam.call_count == initCallCount + 1
-  assert result
-
-# -----------------------------------------------------------------------------
-# TOURNAMENT
-# -----------------------------------------------------------------------------
-
-async def test_findTournamentById(aiohttp_client):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/recurring_tournaments/1337', mockTournament)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  initCallCount = mockTournament.call_count
-  result, details = await apiClient.findTournamentById(1337)
-  assert mockTournament.call_count == initCallCount + 1
-  assert result
-  assert details["name"] == "Happy Smash Hour"
+# # ---------------------------------------------------------------------------
+# # TEAM
+# # ---------------------------------------------------------------------------
 
 
-#   async def createTournamentEvent(self, data):
-#     payload = {"tournament_event": data}
-#     request_url = self.api_url("tournament_events")
-#     async with self._session.post(request_url, json=payload) as r:
-#       if r.status == 201:
-#         return True, 'created'
-#       if r.status == 200:
-#         return True, 'updated'
-#       if r.status == 422:
-#         result = await r.json()
-#         err = Map(result)
-#         return False, err.errors
-#       return False, {}
 
-# -----------------------------------------------------------------------------
-# LOCATION
-# -----------------------------------------------------------------------------
+# # -----------------------------------------------------------------------------
+# # TOURNAMENT
+# # -----------------------------------------------------------------------------
 
-async def test_findLocationByName(aiohttp_client):
-  apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
-  # replace aiohttp ClientSession with a mock
-  app = web.Application()
-  app.router.add_get('/api/v1/locations', mockLocations)
-  apiClient._session = await aiohttp_client(app)
-  # test
-  initCallCount = mockLocations.call_count
-  result, details = await apiClient.findLocationByName("dijon")
-  assert mockLocations.call_count == initCallCount + 1
-  assert len(apiClient._locations_cache) == 2
-  assert apiClient._locations_cache["21"]["name"] == "Dijon"
-  assert result
-  assert details["name"] == "Dijon"
+# async def test_findTournamentById(aiohttp_client):
+#   apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
+#   # replace aiohttp ClientSession with a mock
+#   app = web.Application()
+#   app.router.add_get('/api/v1/recurring_tournaments/1337', mockTournament)
+#   apiClient._session = await aiohttp_client(app)
+#   # test
+#   initCallCount = mockTournament.call_count
+#   result, details = await apiClient.findTournamentById(1337)
+#   assert mockTournament.call_count == initCallCount + 1
+#   assert result
+#   assert details["name"] == "Happy Smash Hour"
 
-#   async def findLocationByName(self, name):
-#     request_url = "{0}?by_name_like={1}".format(self.apiUrl("locations"), name)
-#     async with self._session.get(request_url) as response:
-#       locations = await response.json()
-#       if locations != []:
-#         # puts values in cache before responding
-#         for location in locations:
-#           self._locations_cache[str(location["id"])] = location
-#         return locations[0]
-#       else:
-#         return None
 
-#   async def createLocation(self, name, country=False):
-#     payload = {"name": name}
-#     if country:
-#       payload["type"] = "Locations::Country"
-#     async with self._session.post(self.apiUrl("locations"), json=payload) as r:
-#       if r.status == 201:
-#         # location creation went fine
-#         return True, {}
-#       if r.status == 422:
-#         result = await r.json()
-#         err = Map(result)
-#         return False, err.errors
-#       return False, {}
+# #   async def createTournamentEvent(self, data):
+# #     payload = {"tournament_event": data}
+# #     request_url = self.api_url("tournament_events")
+# #     async with self._session.post(request_url, json=payload) as r:
+# #       if r.status == 201:
+# #         return True, 'created'
+# #       if r.status == 200:
+# #         return True, 'updated'
+# #       if r.status == 422:
+# #         result = await r.json()
+# #         err = Map(result)
+# #         return False, err.errors
+# #       return False, {}
 
-#   # ---------------------------------------------------------------------------
-#   # PLAYER
-#   # ---------------------------------------------------------------------------
+# # -----------------------------------------------------------------------------
+# # LOCATION
+# # -----------------------------------------------------------------------------
 
-#   async def findPlayerById(self, player_id):
-#     request_url = "{0}/{1}".format(self.apiUrl("players"), player_id)
-#     async with self._session.get(request_url) as response:
-#       player = await response.json()
-#       return player
+# async def test_findLocationByName(aiohttp_client):
+#   apiClient = Smashtheque(apiBaseUrl=None, bearerToken=None)
+#   # replace aiohttp ClientSession with a mock
+#   app = web.Application()
+#   app.router.add_get('/api/v1/locations', mockLocations)
+#   apiClient._session = await aiohttp_client(app)
+#   # test
+#   initCallCount = mockLocations.call_count
+#   result, details = await apiClient.findLocationByName("dijon")
+#   assert mockLocations.call_count == initCallCount + 1
+#   assert len(apiClient._locations_cache) == 2
+#   assert apiClient._locations_cache["21"]["name"] == "Dijon"
+#   assert result
+#   assert details["name"] == "Dijon"
 
-#   async def findPlayerByIds(self, player_ids):
-#     players = []
-#     for player_id in player_ids:
-#       player = await self.findPlayerById(player_id)
-#       players.append(player)
-#     return players
+# #   async def findLocationByName(self, name):
+# #     request_url = "{0}?by_name_like={1}".format(self.apiUrl("locations"), name)
+# #     async with self._session.get(request_url) as response:
+# #       locations = await response.json()
+# #       if locations != []:
+# #         # puts values in cache before responding
+# #         for location in locations:
+# #           self._locations_cache[str(location["id"])] = location
+# #         return locations[0]
+# #       else:
+# #         return None
 
-#   async def findPlayerByDiscordId(self, discord_id):
-#     request_url = "{0}?by_discord_id={1}".format(self.apiUrl("players"), discord_id)
-#     async with self._session.get(request_url) as response:
-#       players = await response.json()
-#       if len(players) > 0:
-#         return players[0]
-#       return None
+# #   async def createLocation(self, name, country=False):
+# #     payload = {"name": name}
+# #     if country:
+# #       payload["type"] = "Locations::Country"
+# #     async with self._session.post(self.apiUrl("locations"), json=payload) as r:
+# #       if r.status == 201:
+# #         # location creation went fine
+# #         return True, {}
+# #       if r.status == 422:
+# #         result = await r.json()
+# #         err = Map(result)
+# #         return False, err.errors
+# #       return False, {}
 
-#   async def findPlayersByNameLike(self, name):
-#     request_url = "{0}?by_name_like={1}".format(self.apiUrl("players"), name)
-#     async with self._session.get(request_url) as response:
-#       players = await response.json()
-#       return players
+# #   # ---------------------------------------------------------------------------
+# #   # PLAYER
+# #   # ---------------------------------------------------------------------------
 
-#   async def createPlayer(self, player):
-#     payload = {"player": player}
-#     async with self._session.post(self.apiUrl("players"), json=payload) as r:
-#       if r.status == 201:
-#         return True, {}
-#       if r.status == 422:
-#         result = await r.json()
-#         err = Map(result)
-#         return False, err.errors
-#       return False, {}
+# #   async def findPlayerById(self, player_id):
+# #     request_url = "{0}/{1}".format(self.apiUrl("players"), player_id)
+# #     async with self._session.get(request_url) as response:
+# #       player = await response.json()
+# #       return player
 
-#   async def updatePlayer(self, player_id, data):
-#     payload = {"player": data}
-#     player_url = "{0}/{1}".format(self.apiUrl("players"), player_id)
-#     async with self._session.patch(player_url, json=payload) as r:
-#       if r.status == 200:
-#         result = await r.json()
-#         return True, result
-#       if r.status == 422:
-#         result = await r.json()
-#         err = Map(result)
-#         return False, err.errors
-#       return False, {}
+# #   async def findPlayerByIds(self, player_ids):
+# #     players = []
+# #     for player_id in player_ids:
+# #       player = await self.findPlayerById(player_id)
+# #       players.append(player)
+# #     return players
 
-#   # ---------------------------------------------------------------------------
-#   # DISCORD USER
-#   # ---------------------------------------------------------------------------
+# #   async def findPlayerByDiscordId(self, discord_id):
+# #     request_url = "{0}?by_discord_id={1}".format(self.apiUrl("players"), discord_id)
+# #     async with self._session.get(request_url) as response:
+# #       players = await response.json()
+# #       if len(players) > 0:
+# #         return players[0]
+# #       return None
 
-#   async def findDiscordUserByDiscordId(self, discord_id):
-#     request_url = "{api_url}/{discord_id}".format(api_url=self.apiUrl("discord_users"), discord_id=discord_id)
-#     async with self._session.get(request_url) as response:
-#       player = await response.json()
-#       return player if player != [] else None
+# #   async def findPlayersByNameLike(self, name):
+# #     request_url = "{0}?by_name_like={1}".format(self.apiUrl("players"), name)
+# #     async with self._session.get(request_url) as response:
+# #       players = await response.json()
+# #       return players
 
-#   # ---------------------------------------------------------------------------
-#   # GENERAL
-#   # ---------------------------------------------------------------------------
+# #   async def createPlayer(self, player):
+# #     payload = {"player": player}
+# #     async with self._session.post(self.apiUrl("players"), json=payload) as r:
+# #       if r.status == 201:
+# #         return True, {}
+# #       if r.status == 422:
+# #         result = await r.json()
+# #         err = Map(result)
+# #         return False, err.errors
+# #       return False, {}
 
-#   async def initCache(self):
-#     await self.fetchCharactersIfNeeded()
+# #   async def updatePlayer(self, player_id, data):
+# #     payload = {"player": data}
+# #     player_url = "{0}/{1}".format(self.apiUrl("players"), player_id)
+# #     async with self._session.patch(player_url, json=payload) as r:
+# #       if r.status == 200:
+# #         result = await r.json()
+# #         return True, result
+# #       if r.status == 422:
+# #         result = await r.json()
+# #         err = Map(result)
+# #         return False, err.errors
+# #       return False, {}
 
-#   def unload(self):
-#     asyncio.create_task(self._session.close())
+# #   # ---------------------------------------------------------------------------
+# #   # DISCORD USER
+# #   # ---------------------------------------------------------------------------
+
+# #   async def findDiscordUserByDiscordId(self, discord_id):
+# #     request_url = "{api_url}/{discord_id}".format(api_url=self.apiUrl("discord_users"), discord_id=discord_id)
+# #     async with self._session.get(request_url) as response:
+# #       player = await response.json()
+# #       return player if player != [] else None
+
+# #   # ---------------------------------------------------------------------------
+# #   # GENERAL
+# #   # ---------------------------------------------------------------------------
+
+# #   async def initCache(self):
+# #     await self.fetchCharactersIfNeeded()
+
+# #   def unload(self):
+# #     asyncio.create_task(self._session.close())

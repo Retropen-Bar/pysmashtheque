@@ -7,10 +7,10 @@
 To install the library, you can just run the following command:
 
 # Linux/macOS
-python3 -m pip install -U smashtheque
+`python3 -m pip install -U smashtheque`
 
 # Windows
-py -3 -m pip install -U smashtheque
+`py -3 -m pip install -U smashtheque`
 
 ## Using
 
